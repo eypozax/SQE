@@ -1,2 +1,1 @@
-# SQE
-Programmable Questionnaire Ecosystem
+# SQE: Programmable Questionnaire Ecosystem
