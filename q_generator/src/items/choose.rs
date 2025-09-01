@@ -1,4 +1,4 @@
-// === src/items/choose.rs ===
+use crate::items::common::{escape_attr, escape_html, js_literal_for_key};
 
 /// A Choose node: covers both multiple-choice and boolean-style questions.
 #[derive(Debug, Clone)]
@@ -12,8 +12,6 @@ pub struct Choose {
 }
 
 impl Choose {
-    /// Parse a `choice` block (block is the text between the braces).
-    /// `id` is the optional identifier from the `choice my_id {` header.
     pub fn parse(block: &str, id: Option<String>) -> Self {
         let mut lines = block.lines().map(|l| l.trim()).filter(|l| !l.is_empty());
         let question = lines.next().unwrap_or("⚠ no question").to_string();
@@ -28,7 +26,6 @@ impl Choose {
         while i < lines_vec.len() {
             let ln = lines_vec[i].trim();
             if ln.starts_with(".addons") {
-                // parse until a single line that equals "]"
                 i += 1;
                 while i < lines_vec.len() {
                     let inner = lines_vec[i].trim();
@@ -36,6 +33,7 @@ impl Choose {
                         break;
                     }
                     if inner.starts_with(".script") {
+                        // handle inline or multi-line .script[ ... ]
                         if inner.contains('[') && inner.contains(']') {
                             if let Some(start) = inner.find('[') {
                                 if let Some(end) = inner.rfind(']') {
@@ -100,7 +98,6 @@ impl Choose {
         }
     }
 
-    /// Render HTML for this question and return (html_string, optional question-specific js).
     pub fn render_html(&self, page_idx: usize, q_idx: usize) -> (String, Option<String>) {
         let qname = format!("p{}_q{}", page_idx, q_idx);
         let mut html = String::new();
@@ -114,8 +111,7 @@ impl Choose {
         for (opt_i, (label, value)) in self.options.iter().enumerate() {
             let input_id = format!("{}_opt{}", qname, opt_i);
             html.push_str(&format!(
-                "<div><input type=\"radio\" id=\"{id}\" name=\"{qname}\" data-sqe-value=\"{val_esc}\"> \
-                 <label for=\"{id}\">{label}</label></div>",
+                "<div><input type=\"radio\" id=\"{id}\" name=\"{qname}\" data-sqe-value=\"{val_esc}\"> <label for=\"{id}\">{label}</label></div>",
                 id = escape_attr(&input_id),
                 qname = escape_attr(&qname),
                 val_esc = escape_attr(value),
@@ -125,60 +121,27 @@ impl Choose {
 
         html.push_str("</fieldset>");
 
-        let mut js = String::new();
-
         let store_key = match &self.id {
             Some(s) if !s.is_empty() => s.clone(),
             _ => format!("{}_{}", page_idx, q_idx),
         };
 
-        js.push_str("(function(){\n");
-        js.push_str("  if(!window.SQE_ANSWERS) window.SQE_ANSWERS = {};\n");
-        js.push_str(&format!(
-            "  const inputs = document.querySelectorAll('input[name=\"{}\"]');\n",
-            qname
-        ));
-        js.push_str("  inputs.forEach(i => {\n");
-        js.push_str("    i.addEventListener('change', function(e){\n");
-        js.push_str("      const raw = this.dataset.sqeValue;\n");
-        js.push_str("      const num = Number(raw);\n");
-        js.push_str("      const val = (Number.isFinite(num) && raw !== '') ? num : raw;\n");
-        js.push_str(&format!(
-            "      window.SQE_ANSWERS[{key}] = val;\n",
-            key = js_literal_for_key(&store_key)
-        ));
-        js.push_str(&format!("      document.dispatchEvent(new CustomEvent('sqe:answer', {{ detail: {{ id: {key}, value: val }} }}));\n", key = js_literal_for_key(&store_key)));
-        js.push_str("    });\n");
-        js.push_str("  });\n");
+        // Build JS with proper brace escaping for format!
+        let mut js = format!(
+            "(function() {{\n  if (!window.SQE_ANSWERS) window.SQE_ANSWERS = {{}};\n  const inputs = document.querySelectorAll(\"input[name='{}']\");\n  inputs.forEach(i => {{\n    i.addEventListener('change', function(e) {{\n      const raw = this.dataset.sqeValue;\n      const num = Number(raw);\n      const val = (Number.isFinite(num) && raw !== '') ? num : raw;\n      window.SQE_ANSWERS[{}] = val;\n      document.dispatchEvent(new CustomEvent('sqe:answer', {{ detail: {{ id: {}, value: val }} }}));\n    }});\n  }});\n}}());",
+            qname,
+            js_literal_for_key(&store_key),
+            js_literal_for_key(&store_key)
+        );
 
         if !self.script_lines.is_empty() {
-            js.push_str("  // user .script lines for this question\n");
+            js.push_str("\n// user .script lines for this question\n");
             for line in &self.script_lines {
-                js.push_str("  ");
                 js.push_str(line);
                 js.push_str("\n");
             }
         }
 
-        js.push_str("})();\n");
-
         (html, Some(js))
     }
-}
-
-fn escape_html(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#x27;")
-}
-
-fn escape_attr(s: &str) -> String {
-    escape_html(s)
-}
-
-fn js_literal_for_key(k: &str) -> String {
-    let esc = k.replace("\\", "\\\\").replace("\"", "\\\"");
-    format!("\"{}\"", esc)
 }

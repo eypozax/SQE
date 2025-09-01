@@ -1,3 +1,5 @@
+// === src/main.rs ===
+
 mod convert;
 mod items;
 mod transcompiler;
@@ -13,7 +15,11 @@ fn main() -> std::io::Result<()> {
     let input_path = &args[1];
 
     let ast = transcompiler::compile(input_path)?;
-    println!("Parsed AST:\n{:#?}", ast);
+    println!(
+        "Parsed AST:
+{:#?}",
+        ast
+    );
 
     convert::build_pages(&ast, "out")?;
     println!("Wrote HTML files to ./out (open out/index.html)");

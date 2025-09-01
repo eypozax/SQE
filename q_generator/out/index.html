@@ -17,7 +17,8 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <div id="pages">
 <section class="page" data-index="0">
 <h2>page 1</h2>
-<div class="text-block">Hello!<br>    Welcome!</div>
+<div class="text-block">Hello!
+    Welcome!</div>
 </section>
 <section class="page" data-index="1">
 <h2>Questions</h2>
@@ -35,27 +36,12 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <div class="page-indicator" id="pageIndicator"></div>
 <script>
 const PAGE_COUNT = 3;
-const PAGE_SCRIPTS = [``,`(function(){
-  if(!window.SQE_ANSWERS) window.SQE_ANSWERS = {};
-  const inputs = document.querySelectorAll('input[name="p1_q0"]');
-  inputs.forEach(i => {
-    i.addEventListener('change', function(e){
-      const raw = this.dataset.sqeValue;
-      const num = Number(raw);
-      const val = (Number.isFinite(num) && raw !== '') ? num : raw;
-      window.SQE_ANSWERS["my_multiple_choice"] = val;
-      document.dispatchEvent(new CustomEvent('sqe:answer', { detail: { id: "my_multiple_choice", value: val } }));
-    });
-  });
-  // user .script lines for this question
-  console.log("Hello, World!");
-})();
-`,``];
-document.addEventListener('DOMContentLoaded', () => {
-    const pages = Array.from(document.querySelectorAll('.page'));
-    const prevBtn = document.getElementById('prevBtn');
-    const nextBtn = document.getElementById('nextBtn');
-    const pageIndicator = document.getElementById('pageIndicator');
+const PAGE_SCRIPTS = ["","(function() {\n  if (!window.SQE_ANSWERS) window.SQE_ANSWERS = {};\n  const inputs = document.querySelectorAll(\"input[name='p1_q0']\");\n  inputs.forEach(i => {\n    i.addEventListener('change', function(e) {\n      const raw = this.dataset.sqeValue;\n      const num = Number(raw);\n      const val = (Number.isFinite(num) && raw !== '') ? num : raw;\n      window.SQE_ANSWERS[\"my_multiple_choice\"] = val;\n      document.dispatchEvent(new CustomEvent('sqe:answer', { detail: { id: \"my_multiple_choice\", value: val } }));\n    });\n  });\n}());\n// user .script lines for this question\nconsole.log(\"Hello, World!\");\n",""];
+document.addEventListener("DOMContentLoaded", () => {
+    const pages = Array.from(document.querySelectorAll(".page"));
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const pageIndicator = document.getElementById("pageIndicator");
 
     let currentIndex = 0;
     const ran = new Array(PAGE_COUNT).fill(false);
@@ -67,11 +53,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         pages.forEach((p, i) => {
             if (i === idx) {
-                p.classList.add('active');
-                p.style.display = '';
+                p.classList.add("active");
+                p.style.display = "";
             } else {
-                p.classList.remove('active');
-                p.style.display = 'none';
+                p.classList.remove("active");
+                p.style.display = "none";
             }
         });
 
@@ -86,15 +72,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 ran[idx] = true;
             }
         } catch (e) {
-            console.error('Error running page script for page', idx + 1, e);
+            console.error("Error running page script for page", idx + 1, e);
         }
     }
 
     if (prevBtn) {
-        prevBtn.addEventListener('click', () => { showPage(currentIndex - 1); });
+        prevBtn.addEventListener("click", () => { showPage(currentIndex - 1); });
     }
     if (nextBtn) {
-        nextBtn.addEventListener('click', () => { showPage(currentIndex + 1); });
+        nextBtn.addEventListener("click", () => { showPage(currentIndex + 1); });
     }
 
     showPage(0);

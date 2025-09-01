@@ -8,10 +8,18 @@ fn escape_html(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
-        .replace('\"', "&quot;")
+        .replace('"', "&quot;")
         .replace('\'', "&#x27;")
-        .replace("\r\n", "\n")
         .replace('\n', "<br>")
+}
+
+fn to_js_string(s: &str) -> String {
+    let esc = s
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace("</script>", "<\\/script>");
+    format!("\"{}\"", esc)
 }
 
 pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
@@ -75,8 +83,9 @@ pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
 
         for q in content.iter() {
             match q {
-                Question::Text { text } => {
-                    writeln!(f, "<div class=\"text-block\">{}</div>", escape_html(text))?;
+                Question::Insert(insert) => {
+                    let (html_frag, _maybe_js) = insert.render_html();
+                    writeln!(f, "{}", html_frag)?;
                 }
                 Question::Choose(choose) => {
                     let (html_frag, maybe_js) = choose.render_html(i, q_local_idx);
@@ -92,7 +101,7 @@ pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
         if scripts_for_page.is_empty() {
             page_scripts.push(String::new());
         } else {
-            page_scripts.push(scripts_for_page.join("\n\n"));
+            page_scripts.push(scripts_for_page.join("\n"));
         }
 
         writeln!(f, "</section>")?;
@@ -113,22 +122,18 @@ pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
 
     write!(f, "const PAGE_SCRIPTS = [")?;
     for (idx, s) in page_scripts.iter().enumerate() {
-        let esc = s.replace("\\", "\\\\").replace('`', "\\`");
         if idx > 0 {
             write!(f, ",")?;
         }
-        write!(f, "`{}`", esc)?;
+        write!(f, "{}", to_js_string(s))?;
     }
     writeln!(f, "];")?;
 
-    writeln!(
-        f,
-        "{}",
-        r#"document.addEventListener('DOMContentLoaded', () => {
-    const pages = Array.from(document.querySelectorAll('.page'));
-    const prevBtn = document.getElementById('prevBtn');
-    const nextBtn = document.getElementById('nextBtn');
-    const pageIndicator = document.getElementById('pageIndicator');
+    let nav_js = r#"document.addEventListener("DOMContentLoaded", () => {
+    const pages = Array.from(document.querySelectorAll(".page"));
+    const prevBtn = document.getElementById("prevBtn");
+    const nextBtn = document.getElementById("nextBtn");
+    const pageIndicator = document.getElementById("pageIndicator");
 
     let currentIndex = 0;
     const ran = new Array(PAGE_COUNT).fill(false);
@@ -140,11 +145,11 @@ pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
 
         pages.forEach((p, i) => {
             if (i === idx) {
-                p.classList.add('active');
-                p.style.display = '';
+                p.classList.add("active");
+                p.style.display = "";
             } else {
-                p.classList.remove('active');
-                p.style.display = 'none';
+                p.classList.remove("active");
+                p.style.display = "none";
             }
         });
 
@@ -159,20 +164,21 @@ pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
                 ran[idx] = true;
             }
         } catch (e) {
-            console.error('Error running page script for page', idx + 1, e);
+            console.error("Error running page script for page", idx + 1, e);
         }
     }
 
     if (prevBtn) {
-        prevBtn.addEventListener('click', () => { showPage(currentIndex - 1); });
+        prevBtn.addEventListener("click", () => { showPage(currentIndex - 1); });
     }
     if (nextBtn) {
-        nextBtn.addEventListener('click', () => { showPage(currentIndex + 1); });
+        nextBtn.addEventListener("click", () => { showPage(currentIndex + 1); });
     }
 
     showPage(0);
-});"#
-    )?;
+});"#;
+
+    writeln!(f, "{}", nav_js)?;
 
     writeln!(f, "</script>")?;
     writeln!(f, "</body></html>")?;
