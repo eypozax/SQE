@@ -7,11 +7,7 @@ body{font-family: system-ui, -apple-system, Roboto, 'Segoe UI', Arial; padding:2
 .page.active{display:block;}
 .controls{display:flex;justify-content:space-between;margin-top:18px;}
 .question{margin:12px 0;padding:10px;border-radius:8px;background:#f8f8f8;}
-fieldset.question{
-        border:1px solid #ddd;
-        padding:10px;
-        border-radius:6px;
-    }
+fieldset.question{border:1px solid #ddd;padding:10px;border-radius:6px;}
 .text-block{margin:8px 0;}
 .page-indicator{text-align:center;margin-top:12px;color:#666}
 button:disabled{opacity:.5;cursor:not-allowed}
@@ -22,16 +18,14 @@ button:disabled{opacity:.5;cursor:not-allowed}
 <section class="page" data-index="0">
 <h2>page 1</h2>
 <div class="text-block">Hello!<br>    Welcome!</div>
-<fieldset class="question">
-<legend>Which one do you prefer?</legend>
-<div><input type="radio" id="p0_q0_opt0" name="p0_q0" value="0"> <label for="p0_q0_opt0">windows</label></div>
-<div><input type="radio" id="p0_q0_opt1" name="p0_q0" value="1"> <label for="p0_q0_opt1">macos</label></div>
-<div><input type="radio" id="p0_q0_opt2" name="p0_q0" value="2"> <label for="p0_q0_opt2">gnu+linux</label></div>
-</fieldset>
 </section>
 <section class="page" data-index="1">
-<h2>page 2</h2>
-<div class="text-block">Welcome to page 2!</div>
+<h2>Questions</h2>
+<fieldset class="question" data-q="p1_q0"><legend>Which one do you prefer?</legend><div><input type="radio" id="p1_q0_opt0" name="p1_q0" data-sqe-value="0"> <label for="p1_q0_opt0">windows</label></div><div><input type="radio" id="p1_q0_opt1" name="p1_q0" data-sqe-value="1"> <label for="p1_q0_opt1">macos</label></div><div><input type="radio" id="p1_q0_opt2" name="p1_q0" data-sqe-value="2"> <label for="p1_q0_opt2">gnu+linux</label></div></fieldset>
+</section>
+<section class="page" data-index="2">
+<h2>page 3</h2>
+<div class="text-block">thanks!</div>
 </section>
 </div>
 <div class="controls">
@@ -40,72 +34,70 @@ button:disabled{opacity:.5;cursor:not-allowed}
 </div>
 <div class="page-indicator" id="pageIndicator"></div>
 <script>
-const PAGE_COUNT = 2;
-const PAGE_SCRIPTS = [`console.log("Hello, World!");`,``];
-
-    document.addEventListener('DOMContentLoaded', () => {
-        // grab elements after DOM ready
-        const pages = Array.from(document.querySelectorAll('.page'));
-        const prevBtn = document.getElementById('prevBtn');
-        const nextBtn = document.getElementById('nextBtn');
-        const pageIndicator = document.getElementById('pageIndicator');
-
-        let currentIndex = 0;
-        const ran = new Array(PAGE_COUNT).fill(false); // ensure page scripts run once
-
-        function showPage(idx) {
-            if (idx < 0) idx = 0;
-            if (idx >= PAGE_COUNT) idx = PAGE_COUNT - 1;
-            currentIndex = idx;
-
-            pages.forEach((p, i) => {
-                if (i === idx) {
-                    p.classList.add('active');
-                    p.style.display = '';
-                } else {
-                    p.classList.remove('active');
-                    p.style.display = 'none';
-                }
-            });
-
-            if (prevBtn) prevBtn.disabled = (idx === 0);
-            if (nextBtn) nextBtn.disabled = (idx === PAGE_COUNT - 1);
-            if (pageIndicator) pageIndicator.textContent = "Page " + (idx + 1) + " of " + PAGE_COUNT;
-
-            // Run page script once (if present)
-            try {
-                const scriptText = PAGE_SCRIPTS[idx];
-                if (!ran[idx] && scriptText && scriptText.trim().length > 0) {
-                    new Function(scriptText)();
-                    ran[idx] = true;
-                }
-            } catch (e) {
-                console.error('Error running page script for page', idx + 1, e);
-            }
-        }
-
-        // defensive listener attachment with debug logs
-        if (prevBtn) {
-            prevBtn.addEventListener('click', () => {
-                console.log('prev clicked, currentIndex=', currentIndex);
-                showPage(currentIndex - 1);
-            });
-        } else {
-            console.warn('prevBtn not found');
-        }
-
-        if (nextBtn) {
-            nextBtn.addEventListener('click', () => {
-                console.log('next clicked, currentIndex=', currentIndex);
-                showPage(currentIndex + 1);
-            });
-        } else {
-            console.warn('nextBtn not found');
-        }
-
-        // initialize first page
-        showPage(0);
+const PAGE_COUNT = 3;
+const PAGE_SCRIPTS = [``,`(function(){
+  if(!window.SQE_ANSWERS) window.SQE_ANSWERS = {};
+  const inputs = document.querySelectorAll('input[name="p1_q0"]');
+  inputs.forEach(i => {
+    i.addEventListener('change', function(e){
+      const raw = this.dataset.sqeValue;
+      const num = Number(raw);
+      const val = (Number.isFinite(num) && raw !== '') ? num : raw;
+      window.SQE_ANSWERS["my_multiple_choice"] = val;
+      document.dispatchEvent(new CustomEvent('sqe:answer', { detail: { id: "my_multiple_choice", value: val } }));
     });
-    
+  });
+  // user .script lines for this question
+  console.log("Hello, World!");
+})();
+`,``];
+document.addEventListener('DOMContentLoaded', () => {
+    const pages = Array.from(document.querySelectorAll('.page'));
+    const prevBtn = document.getElementById('prevBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const pageIndicator = document.getElementById('pageIndicator');
+
+    let currentIndex = 0;
+    const ran = new Array(PAGE_COUNT).fill(false);
+
+    function showPage(idx) {
+        if (idx < 0) idx = 0;
+        if (idx >= PAGE_COUNT) idx = PAGE_COUNT - 1;
+        currentIndex = idx;
+
+        pages.forEach((p, i) => {
+            if (i === idx) {
+                p.classList.add('active');
+                p.style.display = '';
+            } else {
+                p.classList.remove('active');
+                p.style.display = 'none';
+            }
+        });
+
+        if (prevBtn) prevBtn.disabled = (idx === 0);
+        if (nextBtn) nextBtn.disabled = (idx === PAGE_COUNT - 1);
+        if (pageIndicator) pageIndicator.textContent = "Page " + (idx + 1) + " of " + PAGE_COUNT;
+
+        try {
+            const scriptText = PAGE_SCRIPTS[idx];
+            if (!ran[idx] && scriptText && scriptText.trim().length > 0) {
+                new Function(scriptText)();
+                ran[idx] = true;
+            }
+        } catch (e) {
+            console.error('Error running page script for page', idx + 1, e);
+        }
+    }
+
+    if (prevBtn) {
+        prevBtn.addEventListener('click', () => { showPage(currentIndex - 1); });
+    }
+    if (nextBtn) {
+        nextBtn.addEventListener('click', () => { showPage(currentIndex + 1); });
+    }
+
+    showPage(0);
+});
 </script>
 </body></html>

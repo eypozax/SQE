@@ -1,8 +1,11 @@
+// === src/transcompiler.rs ===
+
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
 
-/// AST (public so other modules can use it)
+use crate::items::Choose;
+
 #[derive(Debug)]
 pub enum Entry {
     Import {
@@ -16,15 +19,8 @@ pub enum Entry {
 
 #[derive(Debug)]
 pub enum Question {
-    Choice {
-        id: Option<String>,
-        question: String,
-        options: Vec<String>,
-        script: Option<Vec<String>>,
-    },
-    Text {
-        text: String,
-    },
+    Choose(Choose),
+    Text { text: String },
 }
 
 /// Read a multiline block from the iterator until a line containing `closing_marker`.
@@ -39,7 +35,6 @@ where
     while let Some(line_res) = lines.next() {
         let line = line_res?;
         if line.contains(closing_marker) {
-            // include text before marker (if any) then stop
             if let Some(pos) = line.find(closing_marker) {
                 let before = &line[..pos];
                 if !before.trim().is_empty() {
@@ -56,7 +51,6 @@ where
     Ok(out)
 }
 
-/// Parse the SQE-like file into an AST (Vec<Entry>)
 pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
     let file = File::open(path)?;
     let reader = io::BufReader::new(file);
@@ -73,7 +67,6 @@ pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
             continue;
         }
 
-        // page marker: @p "title"
         if line.starts_with("@p") {
             if let Some((title, content)) = current_page.take() {
                 ast.push(Entry::Page { title, content });
@@ -90,7 +83,6 @@ pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
         }
 
         if line.starts_with("insert") {
-            // inline `insert { text }`
             if line.contains('{') && line.contains('}') {
                 if let Some(start) = line.find('{') {
                     if let Some(end) = line.rfind('}') {
@@ -108,7 +100,6 @@ pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
                 }
             }
 
-            // multi-line block
             if line.contains('{') {
                 let block = parse_block(&mut lines_iter, "}")?;
                 let text = block.trim().to_string();
@@ -123,7 +114,6 @@ pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
                 continue;
             }
 
-            // single-line: insert Hello
             let words: Vec<&str> = line.split_whitespace().collect();
             if words.len() > 1 {
                 let text = words[1..].join(" ");
@@ -139,9 +129,7 @@ pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
             continue;
         }
 
-        // choice [id]? { ... }
         if line.starts_with("choice") {
-            // extract id (if present)
             let mut id: Option<String> = None;
             if line.contains('{') {
                 let before_brace = line.split('{').next().unwrap_or("");
@@ -156,7 +144,6 @@ pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
                 }
             }
 
-            // get block
             let block = if line.contains('{') && line.contains('}') {
                 if let Some(start) = line.find('{') {
                     if let Some(end) = line.rfind('}') {
@@ -173,114 +160,23 @@ pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
                 String::new()
             };
 
-            // split block into trimmed non-empty lines
-            let mut block_lines: Vec<String> = block
-                .lines()
-                .map(|l| l.trim().to_string())
-                .filter(|l| !l.is_empty())
-                .collect();
+            let choose_node = Choose::parse(&block, id);
 
-            let mut question_text = "⚠ no question found".to_string();
-            let mut options: Vec<String> = Vec::new();
-            let mut script: Option<Vec<String>> = None;
-
-            if !block_lines.is_empty() {
-                question_text = block_lines.remove(0);
-                let mut i = 0;
-                while i < block_lines.len() {
-                    let ln = &block_lines[i];
-                    if ln.starts_with(".addons") {
-                        // iterate inside addons
-                        i += 1;
-                        while i < block_lines.len() {
-                            let inner = &block_lines[i];
-                            if inner == "]" {
-                                break;
-                            }
-                            if inner.starts_with(".script") {
-                                // inline .script[ ... ] or multiline
-                                if inner.contains('[') && inner.contains(']') {
-                                    if let Some(start) = inner.find('[') {
-                                        if let Some(end) = inner.rfind(']') {
-                                            let s = inner[start + 1..end].trim().to_string();
-                                            script = Some(vec![s]);
-                                        }
-                                    }
-                                } else if inner.contains('[') {
-                                    let mut collected: Vec<String> = Vec::new();
-                                    if let Some(pos) = inner.find('[') {
-                                        let after = inner[pos + 1..].trim();
-                                        if !after.is_empty() {
-                                            collected.push(after.to_string());
-                                        }
-                                    }
-                                    i += 1;
-                                    while i < block_lines.len() {
-                                        let scr_line = &block_lines[i];
-                                        if scr_line.contains(']') {
-                                            if let Some(pos) = scr_line.find(']') {
-                                                let before = scr_line[..pos].trim();
-                                                if !before.is_empty() {
-                                                    collected.push(before.to_string());
-                                                }
-                                            }
-                                            break;
-                                        } else {
-                                            collected.push(scr_line.clone());
-                                        }
-                                        i += 1;
-                                    }
-                                    if !collected.is_empty() {
-                                        script = Some(collected);
-                                    }
-                                }
-                            }
-                            i += 1;
-                        }
-                        i += 1;
-                        continue;
-                    }
-
-                    if ln.contains(">>") {
-                        let left = ln.split(">>").next().unwrap_or("").trim().to_string();
-                        if !left.is_empty() {
-                            options.push(left);
-                        }
-                    } else {
-                        options.push(ln.clone());
-                    }
-
-                    i += 1;
-                }
-            }
-
-            // push to current page or make untitled page
             if let Some((_title, content)) = current_page.as_mut() {
-                content.push(Question::Choice {
-                    id,
-                    question: question_text,
-                    options,
-                    script,
-                });
+                content.push(Question::Choose(choose_node));
             } else {
                 ast.push(Entry::Page {
                     title: "untitled".to_string(),
-                    content: vec![Question::Choice {
-                        id,
-                        question: question_text,
-                        options,
-                        script,
-                    }],
+                    content: vec![Question::Choose(choose_node)],
                 });
             }
 
             continue;
         }
 
-        // ignore anything else for now
+        // unknown lines ignored
     }
 
-    // flush final page
     if let Some((title, content)) = current_page.take() {
         ast.push(Entry::Page { title, content });
     }

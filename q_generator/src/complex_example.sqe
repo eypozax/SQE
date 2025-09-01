@@ -5,6 +5,8 @@ insert {
     Welcome!
 }
 
+@p "Questions"
+
 choice my_multiple_choice {
 Which one do you prefer?
 windows >> 0
@@ -18,8 +20,8 @@ gnu+linux >> 2
 ]
 }
 
-@p "page 2"
+@p "page 3"
 
 insert {
-    Welcome to page 2!
+thanks!
 }
