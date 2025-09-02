@@ -1,37 +1,7 @@
-@p "Welcome Page"
+@p the first page
 
-insert {
-    Hello!
-    This is a quick survey about happiness.
-}
+insert welcome to this platform!
 
-@p "Questions"
+@p the second page
 
-choice happiness_pref {
-How happy are you today?
-Very happy >> 3
-Somewhat happy >> 2
-Neutral >> 1
-Sad >> 0
-.addons [
-    .script[
-        console.log("Happiness question loaded!");
-    ]
-]
-}
-
-f {
-    // This JS function runs after page loads
-    const answer = SQE.getAnswer("happiness_pref");
-    if (answer !== undefined) {
-        return "You selected happiness level: " + answer;
-    } else {
-        return "You haven't answered yet!";
-    }
-}
-
-@p "Thank You"
-
-insert {
-    Thank you for participating!
-}
+insert thanks!
