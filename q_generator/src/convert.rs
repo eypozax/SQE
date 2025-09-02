@@ -1,26 +1,11 @@
+// === src/convert.rs ===
+
 use std::fs::{File, create_dir_all};
 use std::io::{self, Write};
 use std::path::Path;
 
+use crate::items::common::{escape_html, to_js_string};
 use crate::transcompiler::{Entry, Question};
-
-fn escape_html(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#x27;")
-        .replace('\n', "<br>")
-}
-
-fn to_js_string(s: &str) -> String {
-    let esc = s
-        .replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace("</script>", "<\\/script>");
-    format!("\"{}\"", esc)
-}
 
 pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
     create_dir_all(out_dir)?;
@@ -95,6 +80,13 @@ pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
                     }
                     q_local_idx += 1;
                 }
+                Question::Function(func) => {
+                    // Functions produce JS only (no HTML)
+                    let (_html_frag, maybe_js) = func.render_html();
+                    if let Some(js) = maybe_js {
+                        scripts_for_page.push(js);
+                    }
+                }
             }
         }
 
@@ -129,7 +121,45 @@ pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
     }
     writeln!(f, "];")?;
 
+    // Updated nav / runtime JS: defines SQE API and runs page scripts robustly (supports async and return values)
     let nav_js = r#"document.addEventListener("DOMContentLoaded", () => {
+    // tiny runtime API for f { ... } scripts
+    window.SQE = window.SQE || {};
+    const SQE = window.SQE;
+
+    // insert plain text as a .text-block (escaped by using textContent)
+    SQE.insert = SQE.insert || function(text) {
+        const page = document.querySelector(".page.active");
+        if (!page) return null;
+        const div = document.createElement("div");
+        div.className = "text-block";
+        div.textContent = String(text);
+        page.appendChild(div);
+        return div;
+    };
+
+    // insert raw HTML (use with care)
+    SQE.insertHTML = SQE.insertHTML || function(html) {
+        const page = document.querySelector(".page.active");
+        if (!page) return null;
+        const div = document.createElement("div");
+        div.className = "text-block";
+        div.innerHTML = String(html);
+        page.appendChild(div);
+        return div;
+    };
+
+    SQE.getAnswer = SQE.getAnswer || function(key) {
+        return (window.SQE_ANSWERS || {})[key];
+    };
+
+    SQE.setAnswer = SQE.setAnswer || function(key, val) {
+        window.SQE_ANSWERS = window.SQE_ANSWERS || {};
+        window.SQE_ANSWERS[key] = val;
+        // dispatch the same event that choice-rendered inputs use
+        document.dispatchEvent(new CustomEvent('sqe:answer', { detail: { id: key, value: val } }));
+    };
+
     const pages = Array.from(document.querySelectorAll(".page"));
     const prevBtn = document.getElementById("prevBtn");
     const nextBtn = document.getElementById("nextBtn");
@@ -137,6 +167,48 @@ pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
 
     let currentIndex = 0;
     const ran = new Array(PAGE_COUNT).fill(false);
+
+    function runScriptForPage(idx, scriptText) {
+        if (!scriptText || !scriptText.trim()) return;
+        try {
+            // Wrap the user's script inside an async IIFE so `await` is supported.
+            // The wrapped function may return a value (string or DOM Node) or a Promise resolving to one.
+            const execPromise = new Function('return (async function(){\n' + scriptText + '\n})()')();
+
+            const handleResult = (res) => {
+                try {
+                    if (typeof res === 'string') {
+                        SQE.insert(res);
+                    } else if (res instanceof Node) {
+                        const page = pages[idx];
+                        if (page) page.appendChild(res);
+                    } else if (res && Array.isArray(res)) {
+                        // array of strings or nodes
+                        res.forEach(item => {
+                            if (typeof item === 'string') SQE.insert(item);
+                            else if (item instanceof Node) {
+                                const page = pages[idx];
+                                if (page) page.appendChild(item);
+                            }
+                        });
+                    }
+                    // otherwise ignore undefined/null/other results
+                } catch (e) {
+                    console.error("Error handling script result for page", idx + 1, e);
+                }
+            };
+
+            if (execPromise && typeof execPromise.then === 'function') {
+                execPromise.then(handleResult).catch(e => {
+                    console.error("Error running page script (async) for page", idx + 1, e);
+                });
+            } else {
+                handleResult(execPromise);
+            }
+        } catch (e) {
+            console.error("Error running page script for page", idx + 1, e);
+        }
+    }
 
     function showPage(idx) {
         if (idx < 0) idx = 0;
@@ -160,7 +232,7 @@ pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
         try {
             const scriptText = PAGE_SCRIPTS[idx];
             if (!ran[idx] && scriptText && scriptText.trim().length > 0) {
-                new Function(scriptText)();
+                runScriptForPage(idx, scriptText);
                 ran[idx] = true;
             }
         } catch (e) {

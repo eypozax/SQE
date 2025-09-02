@@ -1,27 +1,37 @@
-@p "page 1"
+@p "Welcome Page"
 
 insert {
     Hello!
-    Welcome!
+    This is a quick survey about happiness.
 }
 
 @p "Questions"
 
-choice my_multiple_choice {
-Which one do you prefer?
-windows >> 0
-macos >> 1
-gnu+linux >> 2
+choice happiness_pref {
+How happy are you today?
+Very happy >> 3
+Somewhat happy >> 2
+Neutral >> 1
+Sad >> 0
 .addons [
-    cheating@q2
     .script[
-        console.log("Hello, World!");
+        console.log("Happiness question loaded!");
     ]
 ]
 }
 
-@p "page 3"
+f {
+    // This JS function runs after page loads
+    const answer = SQE.getAnswer("happiness_pref");
+    if (answer !== undefined) {
+        return "You selected happiness level: " + answer;
+    } else {
+        return "You haven't answered yet!";
+    }
+}
+
+@p "Thank You"
 
 insert {
-thanks!
+    Thank you for participating!
 }

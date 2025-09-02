@@ -1,3 +1,5 @@
+// === src/items/choose.rs ===
+
 use crate::items::common::{escape_attr, escape_html, js_literal_for_key};
 
 /// A Choose node: covers both multiple-choice and boolean-style questions.

@@ -1,10 +1,8 @@
-// === src/transcompiler.rs ===
-
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
 
-use crate::items::{Choose, Insert};
+use crate::items::{Choose, Function, Insert};
 
 #[derive(Debug)]
 pub enum Entry {
@@ -21,6 +19,7 @@ pub enum Entry {
 pub enum Question {
     Choose(Choose),
     Insert(Insert),
+    Function(Function),
 }
 
 pub fn parse_block<I>(
@@ -170,6 +169,38 @@ pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
                 ast.push(Entry::Page {
                     title: "untitled".to_string(),
                     content: vec![Question::Choose(choose_node)],
+                });
+            }
+
+            continue;
+        }
+
+        // NEW: function block `f { ... }`
+        if line.starts_with("f") {
+            let block = if line.contains('{') && line.contains('}') {
+                if let Some(start) = line.find('{') {
+                    if let Some(end) = line.rfind('}') {
+                        line[start + 1..end].to_string()
+                    } else {
+                        String::new()
+                    }
+                } else {
+                    String::new()
+                }
+            } else if line.contains('{') {
+                parse_block(&mut lines_iter, "}")?
+            } else {
+                String::new()
+            };
+
+            let fn_node = Function::parse(&block);
+
+            if let Some((_title, content)) = current_page.as_mut() {
+                content.push(Question::Function(fn_node));
+            } else {
+                ast.push(Entry::Page {
+                    title: "untitled".to_string(),
+                    content: vec![Question::Function(fn_node)],
                 });
             }
 
