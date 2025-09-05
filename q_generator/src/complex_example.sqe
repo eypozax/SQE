@@ -1,7 +1,302 @@
-@p the first page
+@p "SHORT SCALE EPQ-R (EYSENCK PERSONALITY QUESTIONNAIRE REVISED)"
 
-insert welcome to this platform!
+insert {
+    The following questions refer to habits, behaviors, and character traits that a person can
+    have. There are no right or wrong answers. What matters is that he answers ALL the questions
+    honestly, actually thinking about his usual way of being and behaving. Please read one
+    question carefully at a time and answer with either Yes or No.
+}
 
-@p the second page
 
-insert thanks!
+choice q1 {
+Do I have frequent mood swings?
+Yes >> 1
+No >> 0
+}
+
+
+choice q2 {
+Do I attach great importance to people\'s opinion?
+Yes >> 1
+No >> 0
+}
+
+choice q3 {
+Am I a person who speaks willingly?
+Yes >> 1
+No >> 0
+}
+
+choice q4 {
+If I say that I will do one thing, then I always keep my promise, however heavy?
+Yes >> 1
+No >> 0
+}
+
+choice q5 {
+Do I ever feel depressed for no reason?
+Yes >> 1
+No >> 0
+}
+
+choice q6 {
+Would I worry about having a debt?
+Yes >> 1
+No >> 0
+}
+
+choice q7 {
+Am I rather cheerful in character?
+Yes >> 1
+No >> 0
+}
+
+choice q8 {
+Have I ever been greedy, taking more than I expected?
+Yes >> 1
+No >> 0
+}
+
+choice q9 {
+Do I get irritated easily?
+Yes >> 1
+No >> 0
+}
+
+choice q10 {
+Would I take a drug, even though I know it can have strange or harmful effects?
+Yes >> 1
+No >> 0
+}
+
+choice q11 {
+Do I like meeting new people?
+Yes >> 1
+No >> 0
+}
+
+choice q12 {
+Have I ever scolded someone for a problem that was actually mine?
+Yes >> 1
+No >> 0
+}
+
+choice q13 {
+Does it take little to hurt my sensitivity?
+Yes >> 1
+No >> 0
+}
+
+choice q14 {
+Do I prefer to go it alone rather than follow the rules?
+Yes >> 1
+No >> 0
+}
+
+choice q15 {
+While attending an animated party, I usually manage to let go, feel comfortable and have fun?
+Yes >> 1
+No >> 0
+}
+
+choice q16 {
+Are all my habits good and acceptable?
+Yes >> 1
+No >> 0
+}
+
+@p "Page 2"
+
+choice q17 {
+Do I often get the feeling that "I just can't take it anymore"?
+Yes >> 1
+No >> 0
+}
+
+choice q18 {
+Do I value good manners and cleanliness?
+Yes >> 1
+No >> 0
+}
+
+choice q19 {
+In general, am I the one who takes the lead when it comes to making friends with someone?
+Yes >> 1
+No >> 0
+}
+
+choice q20 {
+Have I ever taken something, even a pin, that belonged to another?
+Yes >> 1
+No >> 0
+}
+
+choice q21 {
+Do I consider myself a nervous person?
+Yes >> 1
+No >> 0
+}
+
+choice q22 {
+Do I think marriage is an old-fashioned custom and should be eliminated?
+Yes >> 1
+No >> 0
+}
+
+choice q23 {
+Would I be able to easily animate a boring party?
+Yes >> 1
+No >> 0
+}
+
+choice q24 {
+Have I ever lost or damaged something that belonged to another person?
+Yes >> 1
+No >> 0
+}
+
+choice q25 {
+Do I worry easily?
+Yes >> 1
+No >> 0
+}
+
+choice q26 {
+Do I enjoy working with others?
+Yes >> 1
+No >> 0
+}
+
+choice q27 {
+When I am with people, do I tend to stand aside?
+Yes >> 1
+No >> 0
+}
+
+choice q28 {
+Do I worry if I know I made mistakes in my job?
+Yes >> 1
+No >> 0
+}
+
+choice q29 {
+Have I ever said something bad or unpleasant about others?
+Yes >> 1
+No >> 0
+}
+
+choice q30 {
+I consider myself a tense and nervous person?
+Yes >> 1
+No >> 0
+}
+
+choice q31 {
+I think people spend too much time worrying about the future, making savings and insurance?
+Yes >> 1
+No >> 0
+}
+
+choice q32 {
+Do I like being around people?
+Yes >> 1
+No >> 0
+}
+
+choice q33 {
+As a child, did I happen to be cheeky with my parents?
+Yes >> 1
+No >> 0
+}
+
+choice q34 {
+Do I worry too long after an embarrassing experience?
+Yes >> 1
+No >> 0
+}
+
+choice q35 {
+Do I try not to be rude to others?
+Yes >> 1
+No >> 0
+}
+
+choice q36 {
+Do I like having a lot of movement and animation around me?
+Yes >> 1
+No >> 0
+}
+
+choice q37 {
+Have I ever cheated to win in any game?
+Yes >> 1
+No >> 0
+}
+
+@p "Page 3"
+
+choice q38 {
+Do I suffer from nervousness?
+Yes >> 1
+No >> 0
+}
+
+choice q39 {
+I wish others were afraid of me?
+Yes >> 1
+No >> 0
+}
+
+choice q40 {
+Have I ever taken advantage of someone?
+Yes >> 1
+No >> 0
+}
+
+choice q41 {
+Am I mostly silent when I am with people?
+Yes >> 1
+No >> 0
+}
+
+choice q42 {
+Do I often feel alone?
+Yes >> 1
+No >> 0
+}
+
+choice q43 {
+Is it better to follow the rules of society than to go it alone? ..........
+Yes >> 1
+No >> 0
+}
+
+choice q44 {
+Do people consider me full of vitality?
+Yes >> 1
+No >> 0
+}
+
+choice q45 {
+Do I always practice what I say?
+Yes >> 1
+No >> 0
+}
+
+choice q46 {
+Do I often feel guilty?
+Yes >> 1
+No >> 0
+}
+
+choice q47 {
+Do I have to put off what I should do today until tomorrow?
+Yes >> 1
+No >> 0
+}
+
+choice q48 {
+Am I capable of animating a party?
+Yes >> 1
+No >> 0
+}
