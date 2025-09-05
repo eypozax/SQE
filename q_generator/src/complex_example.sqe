@@ -300,3 +300,16 @@ Am I capable of animating a party?
 Yes >> 1
 No >> 0
 }
+
+@p "Results"
+
+f {
+    // after scoring logic…
+    let result = "Your scores:\n"
+    result += "Psychoticism (P): " + P + "\n"
+    result += "Extroversion (E): " + E + "\n"
+    result += "Neuroticism (N): " + N + "\n"
+    result += "Lie (L): " + L
+
+    print(result)
+}
