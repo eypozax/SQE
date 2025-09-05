@@ -304,12 +304,48 @@ No >> 0
 @p "Results"
 
 f {
-    // after scoring logic…
-    let result = "Your scores:\n"
-    result += "Psychoticism (P): " + P + "\n"
-    result += "Extroversion (E): " + E + "\n"
-    result += "Neuroticism (N): " + N + "\n"
-    result += "Lie (L): " + L
+    // Define the scoring function
+    window.customCalculateResults = function(resultsDiv) {
+        if (!window.SQE_ANSWERS) {
+            resultsDiv.innerHTML = "<p>Please answer all questions first.</p>";
+            return;
+        }
 
-    print(result)
+        const a = window.SQE_ANSWERS;
+        let P = 0, E = 0, N = 0, L = 0;
+
+        // Psychoticism
+        [10,14,22,31,39].forEach(q => { if (parseInt(a["q"+q]||0) === 1) P++; });
+        [2,6,18,26,28,35,43].forEach(q => { if (parseInt(a["q"+q]||0) === 0) P++; });
+
+        // Extroversion
+        [3,7,11,15,19,23,32,36,44,48].forEach(q => { if (parseInt(a["q"+q]||0) === 1) E++; });
+        [27,41].forEach(q => { if (parseInt(a["q"+q]||0) === 0) E++; });
+
+        // Neuroticism
+        [1,5,9,13,17,21,25,30,34,38,42,46].forEach(q => { if (parseInt(a["q"+q]||0) === 1) N++; });
+
+        // Lie Scale
+        [4,16,45].forEach(q => { if (parseInt(a["q"+q]||0) === 1) L++; });
+        [8,12,20,24,29,33,37,40,47].forEach(q => { if (parseInt(a["q"+q]||0) === 0) L++; });
+
+        // Display results
+        resultsDiv.innerHTML = `
+            <h3>Your Personality Scores</h3>
+            <ul>
+                <li><strong>Psychoticism (P):</strong> ${P}/12</li>
+                <li><strong>Extroversion (E):</strong> ${E}/12</li>
+                <li><strong>Neuroticism (N):</strong> ${N}/12</li>
+                <li><strong>Lie (L):</strong> ${L}/12</li>
+            </ul>
+        `;
+    };
+
+    // Create a div to hold results
+    const resultsDiv = document.createElement("div");
+    resultsDiv.id = "results";
+    document.body.appendChild(resultsDiv);
+
+    // Call the function immediately to calculate and display results
+    window.customCalculateResults(resultsDiv);
 }
