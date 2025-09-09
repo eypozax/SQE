@@ -104,6 +104,9 @@ pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
     writeln!(f, "<div><button id=\"prevBtn\">Previous</button></div>")?;
     writeln!(f, "<div><button id=\"nextBtn\">Next</button></div>")?;
     writeln!(f, "</div>")?;
+    writeln!(f, "<div id=\"saveBtnContainer\" style=\"text-align:center; margin-top:20px; display:none;\">")?;
+    writeln!(f, "<button id=\"saveBtn\">Save Answers</button>")?;
+    writeln!(f, "</div>")?;
     writeln!(
         f,
         "<div class=\"page-indicator\" id=\"pageIndicator\"></div>"
@@ -228,6 +231,14 @@ pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
         if (prevBtn) prevBtn.disabled = (idx === 0);
         if (nextBtn) nextBtn.disabled = (idx === PAGE_COUNT - 1);
         if (pageIndicator) pageIndicator.textContent = "Page " + (idx + 1) + " of " + PAGE_COUNT;
+        const saveContainer = document.getElementById("saveBtnContainer");
+        if (saveContainer) {
+            if (idx === PAGE_COUNT - 1) {
+                saveContainer.style.display = "block";
+            } else {
+                saveContainer.style.display = "none";
+            }
+        }
 
         try {
             const scriptText = PAGE_SCRIPTS[idx];
@@ -252,6 +263,25 @@ pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
 
     writeln!(f, "{}", nav_js)?;
 
+    writeln!(f, "{}", r#"
+document.addEventListener("DOMContentLoaded", () => {
+    const saveBtn = document.getElementById("saveBtn");
+    if (saveBtn) {
+        saveBtn.addEventListener("click", () => {
+            const data = JSON.stringify(window.SQE_ANSWERS || {}, null, 2);
+            const blob = new Blob([data], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "answers.json";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+    }
+});
+"#)?;
     writeln!(f, "</script>")?;
     writeln!(f, "</body></html>")?;
     Ok(())
