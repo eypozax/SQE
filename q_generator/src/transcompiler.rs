@@ -1,14 +1,17 @@
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
-
-use crate::items::{Choose, Function, Insert};
+ 
+use crate::items::{Choose, Function, Insert, Html, Js, Css};
+use crate::items::qrcode::print_qrcode;
 
 #[derive(Debug)]
 pub enum Entry {
     Import {
         path: String,
     },
+    /// Document-level title (the big title for the whole questionnaire)
+    DocTitle(String),
     Page {
         title: String,
         content: Vec<Question>,
@@ -20,6 +23,9 @@ pub enum Question {
     Choose(Choose),
     Insert(Insert),
     Function(Function),
+    Html(Html),
+    Js(Js),
+    Css(Css),
 }
 
 // --- new helper: reads a brace-delimited block while ignoring braces inside strings ---
@@ -121,6 +127,8 @@ where
     }
 
     // If we exhausted input without closing, return an error
+    let index_url = "https://maibloom.github.io/docs";
+    print_qrcode(index_url);
     Err(io::Error::new(
         io::ErrorKind::UnexpectedEof,
         "unterminated brace block",
@@ -172,14 +180,56 @@ pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
         if line.is_empty() || line.starts_with("//") {
             continue;
         }
-
-        if line.starts_with("@p") {
-            if let Some((title, content)) = current_page.take() {
-                ast.push(Entry::Page { title, content });
-            }
-            let title = line.split('"').nth(1).unwrap_or("untitled").to_string();
-            current_page = Some((title, Vec::new()));
+ 
+        // Support a document-level `title` directive. This sets the questionnaire-wide title
+        // and does NOT create or modify the current page. Use @p for per-page titles.
+        if line.starts_with("title") {
+            // use the trimmed `line` (not raw) so leading whitespace is handled consistently
+            let rest = line["title".len()..].trim();
+            let title = if rest.starts_with('"') {
+                rest.split('"').nth(1).unwrap_or("untitled").to_string()
+            } else if !rest.is_empty() {
+                rest.to_string()
+            } else {
+                "untitled".to_string()
+            };
+            // Emit a document-level title entry into the AST so the converter can use it.
+            ast.push(Entry::DocTitle(title));
             continue;
+        }
+ 
+        if line.starts_with("@p") {
+            // Support both quoted and unquoted page titles:
+            //   @p "Page One"
+            //   @p Page One
+            let rest = line["@p".len()..].trim();
+            let page_title = if rest.starts_with('"') {
+                rest.split('"').nth(1).unwrap_or("untitled").to_string()
+            } else if !rest.is_empty() {
+                rest.to_string()
+            } else {
+                "untitled".to_string()
+            };
+ 
+            // If there's an existing current_page and its title is the placeholder "untitled",
+            // adopt the @p title for that page so content collected before the first @p gets the proper title.
+            if let Some((cur_title, _cur_content)) = current_page.as_mut() {
+                if cur_title == "untitled" {
+                    *cur_title = page_title;
+                    continue;
+                } else {
+                    // Close the current page and start a new one with the provided title.
+                    if let Some((t, c)) = current_page.take() {
+                        ast.push(Entry::Page { title: t, content: c });
+                    }
+                    current_page = Some((page_title, Vec::new()));
+                    continue;
+                }
+            } else {
+                // No current page: start one with the provided title.
+                current_page = Some((page_title, Vec::new()));
+                continue;
+            }
         }
 
         if line.starts_with("import") {
@@ -193,25 +243,18 @@ pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
             if let Some(open_pos) = raw.find('{') {
                 // take substring after first '{'
                 let after = &raw[open_pos + 1..];
-                let block = if after.contains('}') {
-                    // still use the brace-aware read to correctly ignore } inside strings
-                    read_brace_block(&mut lines_iter, after)?
-                } else {
-                    read_brace_block(&mut lines_iter, after)?
-                };
-                let text = block.trim().to_string();
+                let block = read_brace_block(&mut lines_iter, after)?;
+                let text = block; // preserve as-is (block already contains newlines)
                 let insert_node = Insert::parse(&text);
                 if let Some((_title, content)) = current_page.as_mut() {
                     content.push(Question::Insert(insert_node));
                 } else {
-                    ast.push(Entry::Page {
-                        title: "untitled".to_string(),
-                        content: vec![Question::Insert(insert_node)],
-                    });
+                    // No current page — start one instead of creating a standalone page entry.
+                    current_page = Some(("untitled".to_string(), vec![Question::Insert(insert_node)]));
                 }
                 continue;
             }
-
+ 
             // fallback: single-line insert without braces
             let words: Vec<&str> = line.split_whitespace().collect();
             if words.len() > 1 {
@@ -220,10 +263,8 @@ pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
                 if let Some((_title, content)) = current_page.as_mut() {
                     content.push(Question::Insert(insert_node));
                 } else {
-                    ast.push(Entry::Page {
-                        title: "untitled".to_string(),
-                        content: vec![Question::Insert(insert_node)],
-                    });
+                    // Start a current page so subsequent items are grouped with it
+                    current_page = Some(("untitled".to_string(), vec![Question::Insert(insert_node)]));
                 }
             }
             continue;
@@ -258,16 +299,64 @@ pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
             if let Some((_title, content)) = current_page.as_mut() {
                 content.push(Question::Choose(choose_node));
             } else {
-                ast.push(Entry::Page {
-                    title: "untitled".to_string(),
-                    content: vec![Question::Choose(choose_node)],
-                });
+                // Start a new current page when none exists.
+                current_page = Some(("untitled".to_string(), vec![Question::Choose(choose_node)]));
             }
 
             continue;
         }
 
-        // NEW: function block `f { ... }`
+        if line.starts_with("html") {
+            let block = if let Some(open_pos) = raw.find('{') {
+                let after = &raw[open_pos + 1..];
+                read_brace_block(&mut lines_iter, after)?
+            } else {
+                read_brace_block(&mut lines_iter, "")?
+            };
+ 
+            let node = Html::parse(&block);
+            if let Some((_title, content)) = current_page.as_mut() {
+                content.push(Question::Html(node));
+            } else {
+                current_page = Some(("untitled".to_string(), vec![Question::Html(node)]));
+            }
+            continue;
+        }
+ 
+        if line.starts_with("js") {
+            let block = if let Some(open_pos) = raw.find('{') {
+                let after = &raw[open_pos + 1..];
+                read_brace_block(&mut lines_iter, after)?
+            } else {
+                read_brace_block(&mut lines_iter, "")?
+            };
+ 
+            let node = Js::parse(&block);
+            if let Some((_title, content)) = current_page.as_mut() {
+                content.push(Question::Js(node));
+            } else {
+                current_page = Some(("untitled".to_string(), vec![Question::Js(node)]));
+            }
+            continue;
+        }
+ 
+        if line.starts_with("css") {
+            let block = if let Some(open_pos) = raw.find('{') {
+                let after = &raw[open_pos + 1..];
+                read_brace_block(&mut lines_iter, after)?
+            } else {
+                read_brace_block(&mut lines_iter, "")?
+            };
+ 
+            let node = Css::parse(&block);
+            if let Some((_title, content)) = current_page.as_mut() {
+                content.push(Question::Css(node));
+            } else {
+                current_page = Some(("untitled".to_string(), vec![Question::Css(node)]));
+            }
+            continue;
+        }
+ 
         if line.starts_with("f") {
             let block = if let Some(open_pos) = raw.find('{') {
                 let after = &raw[open_pos + 1..];
@@ -275,22 +364,19 @@ pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
             } else {
                 read_brace_block(&mut lines_iter, "")?
             };
-
+ 
             let fn_node = Function::parse(&block);
-
+ 
             if let Some((_title, content)) = current_page.as_mut() {
                 content.push(Question::Function(fn_node));
             } else {
-                ast.push(Entry::Page {
-                    title: "untitled".to_string(),
-                    content: vec![Question::Function(fn_node)],
-                });
+                // Start a new current page when none exists.
+                current_page = Some(("untitled".to_string(), vec![Question::Function(fn_node)]));
             }
-
+ 
             continue;
         }
 
-        // unknown lines ignored
     }
 
     if let Some((title, content)) = current_page.take() {

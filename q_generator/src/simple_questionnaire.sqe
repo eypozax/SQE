@@ -1,0 +1,76 @@
+title "Demo Survey"
+
+@p page 1
+
+choice q1 {
+Do you prefer A?
+Yes >> 1
+No >> 0
+}
+
+
+html {
+  <div data-sqe-fn="p0_fn0"></div>
+}
+js {
+  (function(){
+    const id = "p0_fn0";
+    function render() {
+      const a = window.SQE_ANSWERS || {};
+      const v = a["q1"];
+      let res;
+      if (v === 1 || v === "1") {
+        res = "You selected Yes — perform action X";
+      } else if (v === 0 || v === "0") {
+        res = "You selected No — perform action Y";
+      } else {
+        res = "No answer recorded for q1.";
+      }
+      try {
+        const target = document.querySelector('[data-sqe-fn="'+id+'"]');
+        if (!target) return;
+        // clear previous contents
+        target.innerHTML = '';
+        const d = document.createElement('div');
+        d.className = 'text-block';
+        d.textContent = res;
+        target.appendChild(d);
+      } catch(e) { console.error("sqe js render error", e); }
+    }
+    // run once; runtime will re-run page scripts on input/change
+    render();
+  }());
+}
+
+@p other page
+
+html {
+  <div data-sqe-fn="p2_fn0"></div>
+}
+js {
+  (function(){
+    const id = "p2_fn0";
+    function render() {
+      const a = window.SQE_ANSWERS || {};
+      const v = a["q1"];
+      let res;
+      if (v === 1 || v === "1") {
+        res = "You selected Yes — perform action X";
+      } else if (v === 0 || v === "0") {
+        res = "You selected No — perform action Y";
+      } else {
+        res = "No answer recorded for q1.";
+      }
+      try {
+        const target = document.querySelector('[data-sqe-fn="'+id+'"]');
+        if (!target) return;
+        target.innerHTML = '';
+        const d = document.createElement('div');
+        d.className = 'text-block';
+        d.textContent = res;
+        target.appendChild(d);
+      } catch(e) { console.error("sqe js render error", e); }
+    }
+    render();
+  }());
+}

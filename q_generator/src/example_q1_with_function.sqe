@@ -1,29 +1,11 @@
 title "Demo Survey"
 
-@p page 1
-
+@p "Question"
 choice q1 {
 Do you prefer A?
 Yes >> 1
 No >> 0
 }
-
-
-f {
-  const a = window.SQE_ANSWERS || {};
-  console.log("SQE_ANSWERS:", window.SQE_ANSWERS);
-  const v = a["q1"];
-  console.log("v:", v);
-  if (v === 1 || v === "1") {
-    return "You selected Yes — perform action X";
-  } else if (v === 0 || v === "0") {
-    return "You selected No — perform action Y";
-  } else {
-    return "No answer recorded for q1.";
-  }
-}
-
-@p other page
 
 insert {
 Choose an option above, then click Next to see the result calculated automatically.

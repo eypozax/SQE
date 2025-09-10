@@ -15,10 +15,15 @@ impl Insert {
     }
 
     pub fn render_html(&self) -> (String, Option<String>) {
-        let html = format!(
-            "<div class=\"text-block\">{}</div>",
-            escape_html(&self.text)
-        );
+        // Preserve line breaks: escape each line and join with <br/> so multi-line inserts render
+        // as separate lines in the resulting HTML.
+        let lines: Vec<String> = self
+            .text
+            .lines()
+            .map(|l| escape_html(l))
+            .collect();
+        let joined = lines.join("<br/>\n");
+        let html = format!("<div class=\"text-block\">{}</div>", joined);
         (html, None)
     }
 }

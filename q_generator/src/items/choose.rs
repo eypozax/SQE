@@ -103,34 +103,36 @@ impl Choose {
     pub fn render_html(&self, page_idx: usize, q_idx: usize) -> (String, Option<String>) {
         let qname = format!("p{}_q{}", page_idx, q_idx);
         let mut html = String::new();
-
+ 
+        // Determine the storage key for this question (used by runtime to store answers).
+        let store_key = match &self.id {
+            Some(s) if !s.is_empty() => s.clone(),
+            _ => format!("{}_{}", page_idx, q_idx),
+        };
+ 
         html.push_str(&format!(
             "<fieldset class=\"question\" data-q=\"{}\">",
             escape_html(&qname)
         ));
         html.push_str(&format!("<legend>{}</legend>", escape_html(&self.question)));
-
+ 
         for (opt_i, (label, value)) in self.options.iter().enumerate() {
             let input_id = format!("{}_opt{}", qname, opt_i);
             html.push_str(&format!(
-                "<div><input type=\"radio\" id=\"{id}\" name=\"{qname}\" data-sqe-value=\"{val_esc}\"> <label for=\"{id}\">{label}</label></div>",
+                "<div><input type=\"radio\" id=\"{id}\" name=\"{qname}\" data-sqe-key=\"{key}\" data-sqe-value=\"{val_esc}\"> <label for=\"{id}\">{label}</label></div>",
                 id = escape_attr(&input_id),
                 qname = escape_attr(&qname),
+                key = escape_attr(&store_key),
                 val_esc = escape_attr(value),
                 label = escape_html(label),
             ));
         }
-
+ 
         html.push_str("</fieldset>");
-
-        let store_key = match &self.id {
-            Some(s) if !s.is_empty() => s.clone(),
-            _ => format!("{}_{}", page_idx, q_idx),
-        };
 
         // Build JS with proper brace escaping for format!
         let mut js = format!(
-            "(function() {{\n  if (!window.SQE_ANSWERS) window.SQE_ANSWERS = {{}};\n  const inputs = document.querySelectorAll(\"input[name='{}']\");\n  inputs.forEach(i => {{\n    i.addEventListener('change', function(e) {{\n      const raw = this.dataset.sqeValue;\n      const num = Number(raw);\n      const val = (Number.isFinite(num) && raw !== '') ? num : raw;\n      window.SQE_ANSWERS[{}] = val;\n      document.dispatchEvent(new CustomEvent('sqe:answer', {{ detail: {{ id: {}, value: val }} }}));\n    }});\n  }});\n}}());",
+            "(function() {{\n  try {{\n    if (!window.SQE_ANSWERS) window.SQE_ANSWERS = {{}};\n    const inputs = document.querySelectorAll(\"input[name='{}']\");\n    inputs.forEach(i => {{\n      i.addEventListener('change', function(e) {{\n        try {{\n          const raw = this.dataset.sqeValue;\n          const num = Number(raw);\n          const val = (Number.isFinite(num) && raw !== '') ? num : raw;\n          // Prefer centralized collection when available so checkboxes/radios/text are normalized.\n          if (window.SQE && typeof window.SQE.collectAnswers === 'function') {{\n            window.SQE.collectAnswers();\n          }} else {{\n            window.SQE_ANSWERS[{}] = val;\n          }}\n          // Notify runtime that an answer changed.\n          document.dispatchEvent(new CustomEvent('sqe:answer', {{ detail: {{ id: {}, value: val }} }}));\n        }} catch (e) {{ console.error('SQE choose onchange handler error', e); }}\n      }});\n    }});\n  }} catch(e) {{ console.error('SQE choose init error', e); }}\n}}());",
             qname,
             js_literal_for_key(&store_key),
             js_literal_for_key(&store_key)
