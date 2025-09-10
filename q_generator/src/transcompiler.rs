@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
  
-use crate::items::{Choose, Function, Insert, Html, Js, Css};
+use crate::items::{Choose, Insert, Html, Js, Css};
 use crate::items::qrcode::print_qrcode;
 
 #[derive(Debug)]
@@ -22,7 +22,6 @@ pub enum Entry {
 pub enum Question {
     Choose(Choose),
     Insert(Insert),
-    Function(Function),
     Html(Html),
     Js(Js),
     Css(Css),
@@ -357,25 +356,6 @@ pub fn compile<P: AsRef<Path>>(path: P) -> io::Result<Vec<Entry>> {
             continue;
         }
  
-        if line.starts_with("f") {
-            let block = if let Some(open_pos) = raw.find('{') {
-                let after = &raw[open_pos + 1..];
-                read_brace_block(&mut lines_iter, after)?
-            } else {
-                read_brace_block(&mut lines_iter, "")?
-            };
- 
-            let fn_node = Function::parse(&block);
- 
-            if let Some((_title, content)) = current_page.as_mut() {
-                content.push(Question::Function(fn_node));
-            } else {
-                // Start a new current page when none exists.
-                current_page = Some(("untitled".to_string(), vec![Question::Function(fn_node)]));
-            }
- 
-            continue;
-        }
 
     }
 

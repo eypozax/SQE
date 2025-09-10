@@ -75,7 +75,7 @@ pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
     writeln!(f, "<h1>{}</h1>", escape_html(&doc_title))?;
     writeln!(f, "<div id=\"pages\">")?;
 
-    // Collect per-page scripts as arrays of strings (one entry per Function node in page order)
+    // Collect per-page scripts as arrays of stringified objects (setup scripts and placeholders)
     let mut page_scripts: Vec<Vec<String>> = Vec::new();
 
     for (i, (title, content)) in pages.iter().enumerate() {
@@ -105,18 +105,6 @@ pub fn build_pages(ast: &[Entry], out_dir: &str) -> io::Result<()> {
                         scripts_for_page.push(obj);
                     }
                     q_local_idx += 1;
-                }
-                Question::Function(func) => {
-                    // Functions produce JS only (no HTML). Emit a placeholder and store the function script
-                    let (_html_frag, maybe_js) = func.render_html();
-                    // unique id per function on the page
-                    let fn_id = format!("p{}_fn{}", i, scripts_for_page.len());
-                    writeln!(f, "<div data-sqe-fn=\"{}\"></div>", escape_html(&fn_id))?;
-                    if let Some(js) = maybe_js {
-                        // Store an object literal as a string: {"id": <quoted>, "script": <quoted>}
-                        let obj = format!("{{\"id\":{},\"script\":{}}}", to_js_string(&fn_id), to_js_string(&js));
-                        scripts_for_page.push(obj);
-                    }
                 }
                 Question::Html(node) => {
                     let (html_frag, _maybe_js) = node.render_html();
