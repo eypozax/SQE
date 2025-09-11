@@ -2,7 +2,7 @@ use gtk4::prelude::*;
 use gtk4::{
     Application, ApplicationWindow, Button, Box as GtkBox, TextView, ScrolledWindow, Orientation,
     Paned, WrapMode, FileChooserAction, ResponseType, MessageDialog, ButtonsType, MessageType,
-    DialogFlags, FileChooserDialog,
+    DialogFlags, FileChooserDialog, Revealer,
 };
 use webkit6::WebView;
 use webkit6::prelude::WebViewExt; // for load_uri() and settings()
@@ -34,6 +34,7 @@ fn build_ui(app: &Application) {
 
     // Root layout
     let outer = GtkBox::new(Orientation::Vertical, 6);
+    outer.set_margin_end(6);
 
     // Toolbar
     let toolbar = GtkBox::new(Orientation::Horizontal, 6);
@@ -43,14 +44,23 @@ fn build_ui(app: &Application) {
     let run_button = Button::with_label("Run");
     let live_button = Button::with_label("Live: OFF");
     let info_button = Button::with_label("Info");
+    let toggle_term_button = Button::with_label("Terminal");
 
-    for b in [&new_button, &open_button, &save_button, &run_button, &live_button, &info_button] {
+    for b in [
+        &new_button,
+        &open_button,
+        &save_button,
+        &run_button,
+        &live_button,
+        &info_button,
+        &toggle_term_button,
+    ] {
         toolbar.append(b);
     }
     outer.append(&toolbar);
 
-    // Paned: editor | preview
-    let paned = Paned::new(Orientation::Horizontal);
+    // Editor | Preview (horizontal paned)
+    let paned_horizontal = Paned::new(Orientation::Horizontal);
 
     // Left: editor
     let editor_box = GtkBox::new(Orientation::Vertical, 6);
@@ -68,7 +78,8 @@ fn build_ui(app: &Application) {
     let webview = WebView::new();
     if let Some(settings) = WebViewExt::settings(&webview) {
         settings.set_enable_developer_extras(true);
-        settings.set_enable_javascript(true)
+        // Uncomment if you want to force-enable JS:
+        // settings.set_enable_javascript(true);
     }
     let scrolled_preview = ScrolledWindow::builder()
         .child(&webview)
@@ -76,11 +87,12 @@ fn build_ui(app: &Application) {
         .hexpand(true)
         .build();
 
-    paned.set_start_child(Some(&editor_box));
-    paned.set_end_child(Some(&scrolled_preview));
-    outer.append(&paned);
+    paned_horizontal.set_start_child(Some(&editor_box));
+    paned_horizontal.set_end_child(Some(&scrolled_preview));
+    paned_horizontal.set_resize_start_child(true);
+    paned_horizontal.set_resize_end_child(true);
 
-    // Terminal
+    // Terminal (wrapped in a Revealer so it can be toggled)
     let terminal_view = TextView::new();
     terminal_view.set_editable(false);
     terminal_view.set_wrap_mode(WrapMode::WordChar);
@@ -89,10 +101,22 @@ fn build_ui(app: &Application) {
         .child(&terminal_view)
         .vexpand(true)
         .hexpand(true)
-        .min_content_height(160)
+        .min_content_height(120) // small default intrinsic height
         .build();
-    outer.append(&scrolled_terminal);
 
+    let terminal_revealer = Revealer::new();
+    terminal_revealer.set_child(Some(&scrolled_terminal));
+    terminal_revealer.set_reveal_child(true); // start visible
+
+    // Vertical paned: top (editor+preview) | bottom (terminal)
+    let paned_vertical = Paned::new(Orientation::Vertical);
+    paned_vertical.set_start_child(Some(&paned_horizontal));
+    paned_vertical.set_end_child(Some(&terminal_revealer));
+    paned_vertical.set_resize_start_child(true);
+    paned_vertical.set_resize_end_child(true);
+    paned_vertical.set_position(560); // default split (from top, pixels) -> terminal starts smaller
+
+    outer.append(&paned_vertical);
     window.set_child(Some(&outer));
 
     // Channel: HTML updates -> WebView
@@ -260,10 +284,19 @@ fn build_ui(app: &Application) {
                 "SQE IDLE\n\nA simple SQE editor with live HTML preview.\n\
                  - New/Open/Save files\n\
                  - Run or Live preview via sqe-core\n\
-                 - Terminal shows stdout/stderr",
+                 - Terminal shows stdout/stderr\n\
+                 - Resizable terminal (drag divider) + toggle button",
             );
             dialog.connect_response(|d, _| d.close());
             dialog.show();
+        });
+    }
+
+    // Toggle terminal visibility
+    {
+        let revealer = terminal_revealer.clone();
+        toggle_term_button.connect_clicked(move |_| {
+            revealer.set_reveal_child(!revealer.reveals_child());
         });
     }
 

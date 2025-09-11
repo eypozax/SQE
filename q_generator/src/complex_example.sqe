@@ -1,4 +1,6 @@
-@p "SHORT SCALE EPQ-R (EYSENCK PERSONALITY QUESTIONNAIRE REVISED)"
+title "SHORT SCALE EPQ-R (EYSENCK PERSONALITY QUESTIONNAIRE REVISED)"
+
+@p Page 1
 
 insert {
     The following questions refer to habits, behaviors, and character traits that a person can
@@ -105,7 +107,7 @@ Yes >> 1
 No >> 0
 }
 
-@p "Page 2"
+@p Page 2
 
 choice q17 {
 Do I often get the feeling that "I just can't take it anymore"?
@@ -233,7 +235,7 @@ Yes >> 1
 No >> 0
 }
 
-@p "Page 3"
+@p Page 3
 
 choice q38 {
 Do I suffer from nervousness?
@@ -301,7 +303,7 @@ Yes >> 1
 No >> 0
 }
 
-@p "Results"
+@p Results
 
 js {
     // Define the scoring function
