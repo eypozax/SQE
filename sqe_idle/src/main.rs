@@ -1,7 +1,8 @@
 use gtk4::prelude::*;
 use gtk4::{
     Application, ApplicationWindow, Button, Box as GtkBox, TextView, ScrolledWindow, Orientation,
-    Paned, WrapMode,
+    Paned, WrapMode, FileChooserAction, ResponseType, MessageDialog, ButtonsType, MessageType,
+    DialogFlags, FileChooserDialog,
 };
 use webkit6::WebView;
 use webkit6::prelude::WebViewExt; // for load_uri() and settings()
@@ -10,6 +11,8 @@ use std::fs;
 use std::path::{PathBuf, Path};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::thread;
+use std::rc::Rc;
+use std::cell::Cell;
 use glib;
 
 fn main() {
@@ -26,49 +29,76 @@ fn build_ui(app: &Application) {
         .application(app)
         .title("SQE IDLE — editor + preview")
         .default_width(1100)
-        .default_height(700)
+        .default_height(750)
         .build();
 
-    // Horizontal split: editor | preview
+    // Root layout
+    let outer = GtkBox::new(Orientation::Vertical, 6);
+
+    // Toolbar
+    let toolbar = GtkBox::new(Orientation::Horizontal, 6);
+    let new_button = Button::with_label("New");
+    let open_button = Button::with_label("Open");
+    let save_button = Button::with_label("Save");
+    let run_button = Button::with_label("Run");
+    let live_button = Button::with_label("Live: OFF");
+    let info_button = Button::with_label("Info");
+
+    for b in [&new_button, &open_button, &save_button, &run_button, &live_button, &info_button] {
+        toolbar.append(b);
+    }
+    outer.append(&toolbar);
+
+    // Paned: editor | preview
     let paned = Paned::new(Orientation::Horizontal);
 
     // Left: editor
     let editor_box = GtkBox::new(Orientation::Vertical, 6);
     let text_view = TextView::new();
     text_view.set_wrap_mode(WrapMode::Word);
+    text_view.set_monospace(true);
     let scrolled_editor = ScrolledWindow::builder()
         .child(&text_view)
         .vexpand(true)
         .hexpand(true)
         .build();
-
-    let run_button = Button::with_label("Run SQE → Render HTML");
-
     editor_box.append(&scrolled_editor);
-    editor_box.append(&run_button);
 
     // Right: WebView preview
     let webview = WebView::new();
     if let Some(settings) = WebViewExt::settings(&webview) {
         settings.set_enable_developer_extras(true);
+        settings.set_enable_javascript(true)
     }
-
     let scrolled_preview = ScrolledWindow::builder()
         .child(&webview)
         .vexpand(true)
         .hexpand(true)
         .build();
 
-    // Put the two sides into the paned
     paned.set_start_child(Some(&editor_box));
     paned.set_end_child(Some(&scrolled_preview));
+    outer.append(&paned);
 
-    // Channel: main thread receiver to get HTML path strings
-    let (sender, receiver) = glib::MainContext::channel::<Option<String>>(glib::Priority::default());
+    // Terminal
+    let terminal_view = TextView::new();
+    terminal_view.set_editable(false);
+    terminal_view.set_wrap_mode(WrapMode::WordChar);
+    terminal_view.set_monospace(true);
+    let scrolled_terminal = ScrolledWindow::builder()
+        .child(&terminal_view)
+        .vexpand(true)
+        .hexpand(true)
+        .min_content_height(160)
+        .build();
+    outer.append(&scrolled_terminal);
 
-    // When a path arrives, load it into the WebView
+    window.set_child(Some(&outer));
+
+    // Channel: HTML updates -> WebView
+    let (sender_html, receiver_html) = glib::MainContext::channel::<Option<String>>(glib::Priority::default());
     let webview_clone = webview.clone();
-    receiver.attach(None, move |html_path_opt: Option<String>| {
+    receiver_html.attach(None, move |html_path_opt| {
         if let Some(path_str) = html_path_opt {
             let uri = format!("file://{}", path_str);
             webview_clone.load_uri(&uri);
@@ -76,90 +106,225 @@ fn build_ui(app: &Application) {
         glib::Continue(true)
     });
 
-    // Button click: spawn thread to run sqe-core and send result back
-    let sender_for_button = sender.clone();
-    let text_view_for_button = text_view.clone();
-    run_button.connect_clicked(move |_| {
-        let buffer = text_view_for_button.buffer();
-        let start = buffer.start_iter();
-        let end = buffer.end_iter();
-        let sqe_code = buffer.text(&start, &end, true);
-
-        // Make unique temp dir path (persistent until manual cleanup)
-        let ts = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let tmp_path = std::env::temp_dir().join(format!(
-            "sqe_idle_{}_{}",
-            ts,
-            std::process::id()
-        ));
-        if let Err(e) = fs::create_dir_all(&tmp_path) {
-            eprintln!("Failed to create temp dir {:?}: {}", tmp_path, e);
-            let _ = sender_for_button.send(None);
-            return;
-        }
-
-        // Write temp.sqe
-        let sqe_file = tmp_path.join("temp.sqe");
-        if let Err(e) = fs::write(&sqe_file, sqe_code.as_bytes()) {
-            eprintln!("Failed to write temp.sqe: {}", e);
-            let _ = sender_for_button.send(None);
-            return;
-        }
-
-        // Spawn a thread to run the external process (so UI doesn't freeze)
-        let sender_for_thread = sender_for_button.clone();
-        let tmp_path_clone = tmp_path.clone();
-        thread::spawn(move || {
-            let run = Command::new("sqe-core")
-                .arg("--input")
-                .arg(&sqe_file)
-                .arg("--output")
-                .arg(&tmp_path_clone)
-                .output();
-
-            let run_out = match run {
-                Ok(o) => o,
-                Err(e) => {
-                    eprintln!("Failed to execute the sqe-core command: {}", e);
-                    let _ = sender_for_thread.send(None);
-                    return;
-                }
-            };
-
-            if !run_out.status.success() {
-                eprintln!(
-                    "sqe-core failed with status {}:\n{}",
-                    run_out.status,
-                    String::from_utf8_lossy(&run_out.stderr)
-                );
-                let _ = sender_for_thread.send(None);
-                return;
-            }
-
-            // Find first HTML file in tmp_path_clone
-            eprintln!("Searching for HTML in {:?}", tmp_path_clone);
-            match find_first_html(&tmp_path_clone) {
-                Some(pathbuf) => {
-                    eprintln!("Found HTML file: {:?}", pathbuf);
-                    let path_str = pathbuf.to_string_lossy().to_string();
-                    let _ = sender_for_thread.send(Some(path_str));
-                }
-                None => {
-                    eprintln!("No HTML output found in {:?}", tmp_path_clone);
-                    let _ = sender_for_thread.send(None);
-                }
-            }
-        });
+    // Channel: terminal lines -> terminal TextView
+    let (term_sender, term_receiver) = glib::MainContext::channel::<String>(glib::Priority::default());
+    let terminal_clone = terminal_view.clone();
+    term_receiver.attach(None, move |line| {
+        let buf = terminal_clone.buffer();
+        buf.insert(&mut buf.end_iter(), &format!("{}\n", line));
+        // Auto-scroll to bottom
+        let mark = buf.create_mark(None, &buf.end_iter(), true);
+        terminal_clone.scroll_mark_onscreen(&mark);
+        glib::Continue(true)
     });
 
-    // Put paned into window and show
-    let outer = GtkBox::new(Orientation::Vertical, 6);
-    outer.append(&paned);
-    window.set_child(Some(&outer));
+    // Live mode state
+    let live_mode = Rc::new(Cell::new(false));
+
+    // Run button
+    {
+        let tv = text_view.clone();
+        let s_html = sender_html.clone();
+        let s_term = term_sender.clone();
+        run_button.connect_clicked(move |_| {
+            let buf = tv.buffer();
+            let start = buf.start_iter();
+            let end = buf.end_iter();
+            let code = buf.text(&start, &end, true).to_string();
+            run_sqe_core(code, s_html.clone(), s_term.clone());
+        });
+    }
+
+    // Live toggle
+    {
+        let live_mode = live_mode.clone();
+        let tv = text_view.clone();
+        let s_html = sender_html.clone();
+        let s_term = term_sender.clone();
+        live_button.connect_clicked(move |btn| {
+            let new_state = !live_mode.get();
+            live_mode.set(new_state);
+            btn.set_label(if new_state { "Live: ON" } else { "Live: OFF" });
+            if new_state {
+                // Trigger an immediate run on toggle ON
+                let buf = tv.buffer();
+                let start = buf.start_iter();
+                let end = buf.end_iter();
+                let code = buf.text(&start, &end, true).to_string();
+                run_sqe_core(code, s_html.clone(), s_term.clone());
+            }
+        });
+    }
+
+    // Live: run on each buffer change when enabled
+    {
+        let live_mode = live_mode.clone();
+        let s_html = sender_html.clone();
+        let s_term = term_sender.clone();
+        text_view.buffer().connect_changed(move |buf| {
+            if live_mode.get() {
+                let start = buf.start_iter();
+                let end = buf.end_iter();
+                let code = buf.text(&start, &end, true).to_string();
+                run_sqe_core(code, s_html.clone(), s_term.clone());
+            }
+        });
+    }
+
+    // New
+    {
+        let tv = text_view.clone();
+        new_button.connect_clicked(move |_| {
+            tv.buffer().set_text("");
+        });
+    }
+
+    // Open
+    {
+        let win = window.clone();
+        let tv = text_view.clone();
+        open_button.connect_clicked(move |_| {
+            let dialog = FileChooserDialog::new(
+                Some("Open file"),
+                Some(&win),
+                FileChooserAction::Open,
+                &[
+                    ("Open", ResponseType::Accept),
+                    ("Cancel", ResponseType::Cancel),
+                ],
+            );
+            dialog.connect_response({
+                let dialog = dialog.clone();
+                let tv = tv.clone();
+                move |d, resp| {
+                    if resp == ResponseType::Accept {
+                        if let Some(path) = d.file().and_then(|f| f.path()) {
+                            match fs::read_to_string(&path) {
+                                Ok(content) => tv.buffer().set_text(&content),
+                                Err(e) => eprintln!("Open failed: {}", e),
+                            }
+                        }
+                    }
+                    dialog.close();
+                }
+            });
+            dialog.show();
+        });
+    }
+
+    // Save
+    {
+        let win = window.clone();
+        let tv = text_view.clone();
+        save_button.connect_clicked(move |_| {
+            let dialog = FileChooserDialog::new(
+                Some("Save file"),
+                Some(&win),
+                FileChooserAction::Save,
+                &[
+                    ("Save", ResponseType::Accept),
+                    ("Cancel", ResponseType::Cancel),
+                ],
+            );
+            dialog.connect_response({
+                let dialog = dialog.clone();
+                let tv = tv.clone();
+                move |d, resp| {
+                    if resp == ResponseType::Accept {
+                        if let Some(path) = d.file().and_then(|f| f.path()) {
+                            let buf = tv.buffer();
+                            let start = buf.start_iter();
+                            let end = buf.end_iter();
+                            let text = buf.text(&start, &end, true).to_string();
+                            if let Err(e) = fs::write(&path, text.as_bytes()) {
+                                eprintln!("Save failed: {}", e);
+                            }
+                        }
+                    }
+                    dialog.close();
+                }
+            });
+            dialog.show();
+        });
+    }
+
+    // Info
+    {
+        let win = window.clone();
+        info_button.connect_clicked(move |_| {
+            let dialog = MessageDialog::new(
+                Some(&win),
+                DialogFlags::MODAL,
+                MessageType::Info,
+                ButtonsType::Ok,
+                "SQE IDLE\n\nA simple SQE editor with live HTML preview.\n\
+                 - New/Open/Save files\n\
+                 - Run or Live preview via sqe-core\n\
+                 - Terminal shows stdout/stderr",
+            );
+            dialog.connect_response(|d, _| d.close());
+            dialog.show();
+        });
+    }
+
     window.show();
+}
+
+fn run_sqe_core(code: String, sender_html: glib::Sender<Option<String>>, term_sender: glib::Sender<String>) {
+    // Create a unique temp directory
+    let ts = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+    let tmp_path = std::env::temp_dir().join(format!("sqe_idle_{}_{}", ts, std::process::id()));
+    if let Err(e) = fs::create_dir_all(&tmp_path) {
+        let _ = term_sender.send(format!("Failed to create temp dir: {}", e));
+        let _ = sender_html.send(None);
+        return;
+    }
+
+    // Write input
+    let sqe_file = tmp_path.join("temp.sqe");
+    if let Err(e) = fs::write(&sqe_file, code.as_bytes()) {
+        let _ = term_sender.send(format!("Failed to write temp.sqe: {}", e));
+        let _ = sender_html.send(None);
+        return;
+    }
+
+    // Run sqe-core in a thread
+    let sender_html_cl = sender_html.clone();
+    let term_cl = term_sender.clone();
+    let tmp_path_cl = tmp_path.clone();
+    thread::spawn(move || {
+        match Command::new("sqe-core")
+            .arg("--input").arg(&sqe_file)
+            .arg("--output").arg(&tmp_path_cl)
+            .output()
+        {
+            Ok(o) => {
+                let _ = term_cl.send(format!("> sqe-core exited with {}", o.status));
+                if !o.stdout.is_empty() {
+                    let _ = term_cl.send(String::from_utf8_lossy(&o.stdout).to_string());
+                }
+                if !o.stderr.is_empty() {
+                    let _ = term_cl.send(String::from_utf8_lossy(&o.stderr).to_string());
+                }
+
+                if o.status.success() {
+                    if let Some(html) = find_first_html(&tmp_path_cl) {
+                        let _ = sender_html_cl.send(Some(html.to_string_lossy().to_string()));
+                    } else {
+                        let _ = term_cl.send("No HTML output found".into());
+                        let _ = sender_html_cl.send(None);
+                    }
+                } else {
+                    let _ = term_cl.send("sqe-core failed".into());
+                    let _ = sender_html_cl.send(None);
+                }
+            }
+            Err(e) => {
+                let _ = term_cl.send(format!("Failed to execute sqe-core: {}", e));
+                let _ = sender_html_cl.send(None);
+            }
+        }
+    });
 }
 
 /// Recursive search for the first .html/.htm file

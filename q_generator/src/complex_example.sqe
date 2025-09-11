@@ -303,7 +303,7 @@ No >> 0
 
 @p "Results"
 
-f {
+js {
     // Define the scoring function
     window.customCalculateResults = function(resultsDiv) {
         if (!window.SQE_ANSWERS) {
