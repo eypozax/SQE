@@ -2,7 +2,7 @@ use gtk4::prelude::*;
 use gtk4::{
     Application, ApplicationWindow, Button, Box as GtkBox, TextView, ScrolledWindow, Orientation,
     Paned, WrapMode, FileChooserAction, ResponseType, MessageDialog, ButtonsType, MessageType,
-    DialogFlags, FileChooserDialog, Revealer,
+    DialogFlags, FileChooserDialog, Revealer, CssProvider, StyleContext, STYLE_PROVIDER_PRIORITY_APPLICATION,
 };
 use webkit6::WebView;
 use webkit6::prelude::WebViewExt; // for load_uri() and settings()
@@ -32,9 +32,27 @@ fn build_ui(app: &Application) {
         .default_height(750)
         .build();
 
+    // --- CSS: set background color to #33101c ---
+    let provider = CssProvider::new();
+    let css = r#"
+    .root-bg {
+        background-color: #33101c;
+    }
+    /* Also try to make the ApplicationWindow itself use the color */
+    applicationwindow, window {
+        background-color: #33101c;
+    }
+    "#;
+    // load_from_data takes &str and returns (), no expect().
+    provider.load_from_data(css);
+
     // Root layout
     let outer = GtkBox::new(Orientation::Vertical, 6);
     outer.set_margin_end(6);
+    outer.add_css_class("root-bg");
+
+    // Attach provider to this widget's style context so the CSS applies.
+    outer.style_context().add_provider(&provider, STYLE_PROVIDER_PRIORITY_APPLICATION);
 
     // Toolbar
     let toolbar = GtkBox::new(Orientation::Horizontal, 6);
@@ -283,9 +301,7 @@ fn build_ui(app: &Application) {
                 ButtonsType::Ok,
                 "SQE IDLE\n\nA simple SQE editor with live HTML preview.\n\
                  - New/Open/Save files\n\
-                 - Run or Live preview via sqe-core\n\
-                 - Terminal shows stdout/stderr\n\
-                 - Resizable terminal (drag divider) + toggle button",
+                 - Run or Live preview via sqe-core\n                 - Terminal shows stdout/stderr\n                 - Resizable terminal (drag divider) + toggle button",
             );
             dialog.connect_response(|d, _| d.close());
             dialog.show();
@@ -300,7 +316,7 @@ fn build_ui(app: &Application) {
         });
     }
 
-    window.show();
+    window.present();
 }
 
 fn run_sqe_core(code: String, sender_html: glib::Sender<Option<String>>, term_sender: glib::Sender<String>) {
